@@ -1,14 +1,54 @@
 use rusty_jsc::JSContext;
+use rusty_jsc::JSValue;
 
-fn eval(script: &str, _path: &str) {
-    let mut context = JSContext::default();
+// #[macro_use]
+use rusty_jsc_macros::callback;
+
+#[callback]
+fn write(
+    ctx: JSContext,
+    _function: JSObject,
+    _this: JSObject,
+    args: &[JSValue],
+) -> Result<JSValue, JSValue> {
+    static mut C: i32 = 0;
+
+    println!(
+        "output #{}: Array<{}> {:?}",
+        C,
+        args.len(),
+        args.iter()
+            .map(|v| v.to_string(&ctx).unwrap())
+            .map(|s| s.to_string())
+            .collect::<Vec<_>>()
+            .join(" ")
+    );
+
+    C = C + 1;
+
+    Ok(JSValue::undefined(&ctx))
+}
+
+fn eval(script: &str) {
+    let mut context: JSContext = JSContext::default();
+
+    // Add write function
+    let global = context.get_global_object();
+    let print = JSValue::callback(&context, Some(write));
+    global.set_property(&context, "write", print).unwrap();
 
     let value = context.evaluate_script(script, 1);
     if let Ok(value) = value {
-        println!("Result: {}", value.to_string(&mut context).unwrap().to_string());
+        let ret = regex::Regex::new(r"[\n\r]").unwrap();
+        let msp = regex::Regex::new(r" {2,}").unwrap();
+
+        let value = value.to_string(&mut context).unwrap().to_string();
+        let value = ret.replace_all(&value, " ").to_string() ;
+        let value = msp.replace_all(&value, " ") ;
+
+        println!("Result: {}", value);
     }
 }
-
 
 fn main() {
     // Get script path from args
@@ -19,9 +59,8 @@ fn main() {
 
     let script = &std::fs::read_to_string(path).unwrap();
 
-    eval(script, path);
+    eval(script);
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -33,11 +72,17 @@ mod tests {
 
         let start = std::time::Instant::now();
         for _ in 0..repeat {
-            eval(script, path);
+            eval(script);
         }
         let end = std::time::Instant::now();
 
-        writeln!(std::io::stdout(), "JSC Time for {:?}: {:?}", path, end - start).unwrap();
+        writeln!(
+            std::io::stdout(),
+            "JSC Time for {:?}: {:?}",
+            path,
+            end - start
+        )
+        .unwrap();
     }
 
     #[test]
@@ -45,7 +90,7 @@ mod tests {
         let path = "test/add.js";
         let script = &std::fs::read_to_string(path).unwrap();
 
-        eval(script, path);
+        eval(script);
     }
 
     #[test]

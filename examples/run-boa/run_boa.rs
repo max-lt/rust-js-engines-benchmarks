@@ -1,11 +1,59 @@
 use boa::Context;
+use boa::JsResult;
+use boa::JsValue;
+use boa::NativeFunction;
+use boa_engine as boa;
 
-fn eval(script: &str, _path: &str) {
-    let mut context = Context::new();
+fn write(_this: &JsValue, args: &[JsValue], context: &mut Context<'_>) -> JsResult<JsValue> {
+    static mut C: i32 = 0;
 
-    let value = context.eval(script);
-    if let Ok(value) = value {
-        println!("Result: {}", value.to_string(&mut context).unwrap().to_string());
+    println!(
+        "output #{}: Array<{}> {:?}",
+        unsafe { C },
+        args.len(),
+        args.iter()
+            .map(|v| v.to_string(context).unwrap())
+            .map(|s| s.to_std_string_escaped())
+            .collect::<Vec<_>>()
+            .join(" ")
+    );
+
+    unsafe { C = C + 1 };
+
+    Ok(JsValue::undefined())
+}
+
+fn eval(script: &str) {
+    let mut context = Context::builder().build().unwrap();
+
+    // // Set the context's runtime limits, awesome !!! 
+    // context.runtime_limits_mut().set_loop_iteration_limit(10);
+    // context.runtime_limits_mut().set_stack_size_limit(1000);
+    // context.runtime_limits_mut().set_recursion_limit(10);
+
+    let source = boa::Source::from_bytes(script);
+
+    // Add write function
+    let write: NativeFunction = NativeFunction::from_fn_ptr(write);
+    context
+        .register_global_builtin_callable("write", 99, write)
+        .unwrap();
+
+    let value = context.eval(source);
+    match value {
+        Ok(value) => {
+            println!(
+                "Result: {:?}",
+                value
+                    .to_string(&mut context)
+                    .unwrap()
+                    .to_std_string()
+                    .unwrap()
+            );
+        }
+        Err(error) => {
+            println!("Error: {:?}", error.to_string());
+        }
     }
 }
 
@@ -18,9 +66,8 @@ fn main() {
 
     let script = &std::fs::read_to_string(path).unwrap();
 
-    eval(script, path);
+    eval(script);
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -32,11 +79,17 @@ mod tests {
 
         let start = std::time::Instant::now();
         for _ in 0..repeat {
-            eval(script, path);
+            eval(script);
         }
         let end = std::time::Instant::now();
 
-        writeln!(std::io::stdout(), "boa Time for {:?}: {:?}", path, end - start).unwrap();
+        writeln!(
+            std::io::stdout(),
+            "boa Time for {:?}: {:?}",
+            path,
+            end - start
+        )
+        .unwrap();
     }
 
     #[test]
@@ -44,7 +97,7 @@ mod tests {
         let path = "test/add.js";
         let script = &std::fs::read_to_string(path).unwrap();
 
-        eval(script, path);
+        eval(script);
     }
 
     #[test]

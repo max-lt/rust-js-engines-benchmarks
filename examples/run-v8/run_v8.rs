@@ -1,3 +1,51 @@
+pub struct ArgumentsIterator<'a> {
+    target: &'a v8::FunctionCallbackArguments<'a>,
+    index: i32,
+}
+
+impl<'a> Iterator for ArgumentsIterator<'a> {
+    type Item = v8::Local<'a, v8::Value>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index < self.target.length() {
+            let value = self.target.get(self.index);
+            self.index += 1;
+            Some(value)
+        } else {
+            None
+        }
+    }
+}
+
+pub trait Iterable {
+    fn iter(&self) -> ArgumentsIterator;    
+}
+
+impl<'a> Iterable for v8::FunctionCallbackArguments<'a> {
+    fn iter(&self) -> ArgumentsIterator {
+        ArgumentsIterator {
+            target: self,
+            index: 0,
+        }
+    }
+}
+
+fn write(scope: &mut v8::HandleScope, args: v8::FunctionCallbackArguments, _ret: v8::ReturnValue) {
+    static mut C: i32 = 0;
+
+    println!(
+        "output #{}: Array<{}> {:?}",
+        unsafe { C },
+        args.length(),
+        args.iter()
+            .map(|s| s.to_rust_string_lossy(scope))
+            .collect::<Vec<_>>()
+            .join(" ")
+    );
+
+    unsafe { C = C + 1 };
+}
+
 fn eval(script: &str, _path: &str) {
     // Create a new Isolate and make it the current one.
     let isolate = &mut v8::Isolate::new(v8::CreateParams::default());
@@ -13,6 +61,13 @@ fn eval(script: &str, _path: &str) {
 
     // Create a string containing the JavaScript source code.
     let source = v8::String::new(scope, script).unwrap();
+
+    // Add write function
+    let write = v8::FunctionTemplate::new(scope, write);
+    let write = write.get_function(scope).unwrap();
+    let global = context.global(scope);
+    let write_key = v8::String::new(scope, "write").unwrap().into();
+    global.set(scope, write_key, write.into());
 
     // Compile the source code.
     let script = v8::Script::compile(scope, source, None).unwrap();
