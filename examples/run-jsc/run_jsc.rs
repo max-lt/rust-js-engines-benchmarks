@@ -38,15 +38,21 @@ fn eval(script: &str) {
     global.set_property(&context, "write", print).unwrap();
 
     let value = context.evaluate_script(script, 1);
-    if let Ok(value) = value {
-        let ret = regex::Regex::new(r"[\n\r]").unwrap();
-        let msp = regex::Regex::new(r" {2,}").unwrap();
 
-        let value = value.to_string(&mut context).unwrap().to_string();
-        let value = ret.replace_all(&value, " ").to_string() ;
-        let value = msp.replace_all(&value, " ") ;
+    match value {
+        Ok(value) => {
+            let ret = regex::Regex::new(r"[\n\r]").unwrap();
+            let msp = regex::Regex::new(r" {2,}").unwrap();
 
-        println!("Result: {}", value);
+            let value = value.to_string(&mut context).unwrap().to_string();
+            let value = ret.replace_all(&value, " ").to_string();
+            let value = msp.replace_all(&value, " ");
+
+            println!("Result: {}", value);
+        }
+        Err(error) => {
+            println!("Error: {:?}", error.to_string(&mut context).unwrap().to_string());
+        }
     }
 }
 
